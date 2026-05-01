@@ -20,4 +20,7 @@ check_openstack_cli
 load_openrc "$OPENRC_FILE"
 check_openstack_connection
 
+create_keypair_if_missing "$TAG" "$SSH_KEY"
+create_network_if_missing "$TAG"
+
 log "Install basic OpenStack validation completed."
