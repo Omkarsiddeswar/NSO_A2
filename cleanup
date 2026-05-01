@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+set -e
+
+if [ "$#" -ne 3 ]; then
+    echo "Usage: ./cleanup <openrc> <tag> <ssh_key>"
+    exit 1
+fi
+
+OPENRC_FILE="$1"
+TAG="$2"
+SSH_KEY="$3"
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') Starting cleanup for $TAG."
+
+if [ ! -f "$OPENRC_FILE" ]; then
+    echo "ERROR: OpenRC file not found: $OPENRC_FILE"
+    exit 1
+fi
+
+if [ ! -f "$SSH_KEY" ]; then
+    echo "ERROR: SSH key file not found: $SSH_KEY"
+    exit 1
+fi
+
+source "$OPENRC_FILE"
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') OpenStack credentials loaded."
+echo "$(date '+%Y-%m-%d %H:%M:%S') Cleanup script skeleton is working."
