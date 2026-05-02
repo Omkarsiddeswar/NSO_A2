@@ -204,7 +204,13 @@ get_server_ip() {
     local server_name="$1"
 
     openstack server show "$server_name" -f json | \
-        python3 -c "import sys,json; d=json.load(sys.stdin); print(list(d['addresses'].values())[0][0]['addr'])"
+        python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+addrs = list(d['addresses'].values())[0]
+a = addrs[0]
+print(a if isinstance(a, str) else a['addr'])
+"
 }
 
 get_free_floating_ip() {
@@ -237,10 +243,12 @@ get_floating_ip() {
 import sys, json
 data = json.load(sys.stdin)
 for addrs in data['addresses'].values():
-    for addr in addrs:
-        if isinstance(addr, dict) and addr.get('OS-EXT-IPS:type') == 'floating':
-            print(addr['addr'])
-            sys.exit()
+    # this openstack returns plain strings not dicts
+    # private IP is first, floating IP is second
+    if len(addrs) >= 2:
+        a = addrs[1]
+        print(a if isinstance(a, str) else a['addr'])
+        sys.exit()
 "
 }
 
