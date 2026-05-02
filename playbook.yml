@@ -107,6 +107,7 @@
           Environment=FLASK_APP=alive.py
           ExecStart=/usr/bin/python3 -m flask run --host=0.0.0.0 --port=5001
           Restart=on-failure
+          AmbientCapabilities=CAP_NET_RAW
 
           [Install]
           WantedBy=multi-user.target
@@ -149,7 +150,13 @@
     - name: Write Nginx UDP stream config
       template:
         src: nginx_snmp.conf.j2
-        dest: /etc/nginx/conf.d/snmp-stream.conf
+        dest: /etc/nginx/modules-enabled/snmp-stream.conf
+
+    - name: Make sure nginx.conf includes the stream config
+      lineinfile:
+        path: /etc/nginx/nginx.conf
+        line: 'include /etc/nginx/modules-enabled/snmp-stream.conf;'
+        insertafter: EOF
 
     - name: Restart Nginx
       systemd:
