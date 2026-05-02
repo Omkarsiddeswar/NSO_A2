@@ -373,3 +373,16 @@ update_node_list() {
 
     log "Updated node list on bastion."
 }
+validate_deployment() {
+    local proxy_ip="$1"
+
+    log "Validating service through proxy."
+
+    for i in 1 2 3; do
+        local response
+        response=$(curl -s --max-time 5 "http://${proxy_ip}:5000/" 2>/dev/null || echo "no response")
+        log "Request ${i}: $response"
+    done
+
+    log "Validation completed."
+}

@@ -53,6 +53,22 @@ assign_floating_ip "${TAG}_bastion" "$BASTION_IP"
 PROXY_IP=$(get_free_floating_ip)
 assign_floating_ip "${TAG}_proxy" "$PROXY_IP"
 
+BASTION_IP=$(get_floating_ip "${TAG}_bastion")
+PROXY_IP=$(get_floating_ip "${TAG}_proxy")
+
+wait_for_ssh "$BASTION_IP" "$SSH_KEY"
+
+build_ssh_config "$TAG" "$SSH_KEY" "$BASTION_IP"
+build_inventory "$TAG"
+update_node_list "$TAG" "$BASTION_IP" "$SSH_KEY"
+
+log "Running Ansible playbook."
+ansible-playbook -i hosts playbook.yml \
+    --ssh-extra-args="-F ${TAG}_SSHconfig -o StrictHostKeyChecking=no" \
+    -e "tag=$TAG proxy_ip=$PROXY_IP node_count=$NODE_COUNT"
+
 log "Cloud resources are ready."
-log "Bastion floating IP: $(get_floating_ip "${TAG}_bastion")"
-log "Proxy floating IP: $(get_floating_ip "${TAG}_proxy")"
+log "Bastion floating IP: $BASTION_IP"
+log "Proxy floating IP: $PROXY_IP"
+
+validate_deployment "$PROXY_IP"
