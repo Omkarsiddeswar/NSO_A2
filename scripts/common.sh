@@ -258,3 +258,118 @@ assign_floating_ip() {
         openstack server add floating ip "$server_name" "$floating_ip"
     fi
 }
+
+wait_for_ssh() {
+    local ip_address="$1"
+    local key_file="$2"
+    local tries=0
+
+    log "Waiting for SSH on $ip_address."
+
+    until ssh -i "$key_file" \
+        -o StrictHostKeyChecking=no \
+        -o UserKnownHostsFile=/dev/null \
+        -o ConnectTimeout=5 \
+        -o BatchMode=yes \
+        "ubuntu@$ip_address" "echo ok" >/dev/null 2>&1; do
+
+        tries=$((tries + 1))
+
+        if [ "$tries" -ge 24 ]; then
+            fail "SSH on $ip_address did not become ready."
+        fi
+
+        sleep 10
+    done
+
+    log "SSH ready on $ip_address."
+}
+
+build_ssh_config() {
+    local tag="$1"
+    local key_file="$2"
+    local bastion_ip="$3"
+    local output_file="${tag}_SSHconfig"
+
+    log "Writing SSH config to $output_file."
+
+    cat > "$output_file" <<EOF
+Host bastion
+    HostName $bastion_ip
+    User ubuntu
+    IdentityFile $key_file
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+
+Host ${tag}_proxy
+    HostName $(get_server_ip "${tag}_proxy")
+    User ubuntu
+    IdentityFile $key_file
+    ProxyJump bastion
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+EOF
+
+    local node_count
+    node_count=$(cat servers.conf | tr -d '[:space:]')
+
+    for i in $(seq 1 "$node_count"); do
+        cat >> "$output_file" <<EOF
+
+Host ${tag}_node${i}
+    HostName $(get_server_ip "${tag}_node${i}")
+    User ubuntu
+    IdentityFile $key_file
+    ProxyJump bastion
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+EOF
+    done
+}
+
+build_inventory() {
+    local tag="$1"
+    local node_count
+
+    node_count=$(cat servers.conf | tr -d '[:space:]')
+
+    log "Writing Ansible inventory."
+
+    {
+        echo "[proxy]"
+        echo "${tag}_proxy ansible_host=$(get_server_ip "${tag}_proxy")"
+        echo ""
+        echo "[bastion]"
+        echo "${tag}_bastion ansible_host=$(get_server_ip "${tag}_bastion")"
+        echo ""
+        echo "[nodes]"
+        for i in $(seq 1 "$node_count"); do
+            echo "${tag}_node${i} ansible_host=$(get_server_ip "${tag}_node${i}")"
+        done
+        echo ""
+        echo "[all:vars]"
+        echo "ansible_user=ubuntu"
+        echo "ansible_ssh_common_args='-F ${tag}_SSHconfig -o StrictHostKeyChecking=no'"
+    } > hosts
+}
+
+update_node_list() {
+    local tag="$1"
+    local bastion_ip="$2"
+    local key_file="$3"
+    local node_count
+
+    node_count=$(cat servers.conf | tr -d '[:space:]')
+
+    local node_ips=""
+    for i in $(seq 1 "$node_count"); do
+        node_ips+="$(get_server_ip "${tag}_node${i}")"$'\n'
+    done
+
+    echo "$node_ips" | ssh -i "$key_file" \
+        -o StrictHostKeyChecking=no \
+        -o UserKnownHostsFile=/dev/null \
+        "ubuntu@$bastion_ip" "cat > /home/ubuntu/nodes.yaml"
+
+    log "Updated node list on bastion."
+}
