@@ -151,3 +151,58 @@ get_flavor() {
         openstack flavor list -f value -c Name | head -1
     fi
 }
+
+launch_server() {
+    local server_name="$1"
+    local tag="$2"
+    local image_name="$3"
+    local flavor_name="$4"
+
+    local network_name="${tag}_network"
+    local key_name="${tag}_key"
+    local sg_name="${tag}_security_group"
+
+    if openstack server show "$server_name" >/dev/null 2>&1; then
+        log "Detected $server_name."
+    else
+        log "Launching $server_name."
+        openstack server create \
+            --image "$image_name" \
+            --flavor "$flavor_name" \
+            --network "$network_name" \
+            --security-group "$sg_name" \
+            --key-name "$key_name" \
+            --tag "$tag" \
+            "$server_name" >/dev/null
+    fi
+}
+
+wait_for_servers() {
+    local servers=("$@")
+
+    log "Waiting for servers to become ACTIVE."
+
+    for server_name in "${servers[@]}"; do
+        local status=""
+        local tries=0
+
+        while [ "$status" != "ACTIVE" ] && [ "$tries" -lt 60 ]; do
+            sleep 5
+            status=$(openstack server show "$server_name" -f value -c status 2>/dev/null || echo "")
+            tries=$((tries + 1))
+        done
+
+        if [ "$status" != "ACTIVE" ]; then
+            fail "$server_name did not become ACTIVE. Current status: $status"
+        fi
+
+        log "$server_name is ACTIVE."
+    done
+}
+
+get_server_ip() {
+    local server_name="$1"
+
+    openstack server show "$server_name" -f json | \
+        python3 -c "import sys,json; d=json.load(sys.stdin); print(list(d['addresses'].values())[0][0]['addr'])"
+}
