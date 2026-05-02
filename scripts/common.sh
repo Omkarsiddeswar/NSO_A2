@@ -145,8 +145,8 @@ get_image() {
 }
 
 get_flavor() {
-    if openstack flavor show small >/dev/null 2>&1; then
-        echo "small"
+    if openstack flavor show tiny >/dev/null 2>&1; then
+        echo "tiny"
     else
         openstack flavor list -f value -c Name | head -1
     fi
