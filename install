@@ -51,6 +51,8 @@ wait_for_servers "${TAG}_bastion" "${TAG}_proxy" "${NODE_NAMES[@]}"
 BASTION_IP=$(get_free_floating_ip)
 assign_floating_ip "${TAG}_bastion" "$BASTION_IP"
 
+sleep 5
+
 PROXY_IP=$(get_free_floating_ip)
 assign_floating_ip "${TAG}_proxy" "$PROXY_IP"
 

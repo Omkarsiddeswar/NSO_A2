@@ -390,19 +390,14 @@ count_live_nodes() {
     local tag="$1"
     local bastion_ip="$2"
     local key_file="$3"
-    local node_count
-
-    node_count=$(cat servers.conf | tr -d '[:space:]')
-
     local live_count=0
 
-    for i in $(seq 1 "$node_count"); do
-        local node_ip
-        node_ip=$(get_server_ip "${tag}_node${i}" 2>/dev/null || true)
+    while IFS= read -r node_name; do
+        [ -z "$node_name" ] && continue
 
-        if [ -z "$node_ip" ]; then
-            continue
-        fi
+        local node_ip
+        node_ip=$(get_server_ip "$node_name" 2>/dev/null || true)
+        [ -z "$node_ip" ] && continue
 
         local result
         result=$(ssh -i "$key_file" \
@@ -415,7 +410,7 @@ count_live_nodes() {
         if [ "$result" = "ok" ]; then
             live_count=$((live_count + 1))
         fi
-    done
+    done <<< "$(openstack server list --name "${tag}_node" -f value -c Name 2>/dev/null)"
 
     echo "$live_count"
 }

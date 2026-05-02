@@ -92,7 +92,7 @@ while true; do
             INDEX=$((INDEX - 1))
         done
 
-        sleep 10
+        sleep 20
     fi
 
     build_ssh_config "$TAG" "$SSH_KEY" "$BASTION_IP"
