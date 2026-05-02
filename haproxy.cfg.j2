@@ -18,5 +18,5 @@ frontend service_front
 backend service_nodes
     balance roundrobin
 {% for host in groups['nodes'] %}
-    server {{ host }} {{ hostvars[host]['ansible_host'] }}:5000 check
+    server {{ host }} {{ hostvars[host]['ansible_default_ipv4']['address'] }}:5000 check
 {% endfor %}

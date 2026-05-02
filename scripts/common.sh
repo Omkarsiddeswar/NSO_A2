@@ -338,26 +338,26 @@ EOF
 build_inventory() {
     local tag="$1"
     local node_count
-
     node_count=$(cat servers.conf | tr -d '[:space:]')
 
     log "Writing Ansible inventory."
 
     {
         echo "[proxy]"
-        echo "${tag}_proxy ansible_host=$(get_server_ip "${tag}_proxy")"
+        echo "${tag}_proxy"
         echo ""
         echo "[bastion]"
-        echo "${tag}_bastion ansible_host=$(get_server_ip "${tag}_bastion")"
+        echo "${tag}_bastion"
         echo ""
         echo "[nodes]"
         for i in $(seq 1 "$node_count"); do
-            echo "${tag}_node${i} ansible_host=$(get_server_ip "${tag}_node${i}")"
+            echo "${tag}_node${i}"
         done
         echo ""
         echo "[all:vars]"
         echo "ansible_user=ubuntu"
-        echo "ansible_ssh_common_args='-F ${tag}_SSHconfig -o StrictHostKeyChecking=no'"
+        echo "ansible_ssh_private_key_file=$SSH_KEY"
+        echo "ansible_ssh_common_args='-F ${tag}_SSHconfig -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'"
     } > hosts
 }
 
