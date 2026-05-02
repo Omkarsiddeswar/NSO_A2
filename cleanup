@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+kk#!/usr/bin/env bash
 
 set -e
 
@@ -11,19 +11,68 @@ OPENRC_FILE="$1"
 TAG="$2"
 SSH_KEY="$3"
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') Starting cleanup for $TAG."
+source scripts/common.sh
 
-if [ ! -f "$OPENRC_FILE" ]; then
-    echo "ERROR: OpenRC file not found: $OPENRC_FILE"
-    exit 1
+check_file_exists "$SSH_KEY" "SSH key file"
+check_openstack_cli
+load_openrc "$OPENRC_FILE"
+check_openstack_connection
+
+log "Cleaning up resources for $TAG."
+
+SERVERS=$(openstack server list --tags "$TAG" -f value -c Name 2>/dev/null || true)
+
+OWNED_FLOATING_IPS=()
+
+if [ -n "$SERVERS" ]; then
+    while IFS= read -r server_name; do
+        floating_ip=$(get_floating_ip "$server_name" 2>/dev/null || true)
+
+        if [ -n "$floating_ip" ]; then
+            OWNED_FLOATING_IPS+=("$floating_ip")
+        fi
+    done <<< "$SERVERS"
+
+    while IFS= read -r server_name; do
+        log "Deleting server $server_name."
+        openstack server delete "$server_name" >/dev/null 2>&1 || true
+    done <<< "$SERVERS"
+
+    log "Waiting for servers to disappear."
+    sleep 20
+else
+    log "No servers found for $TAG."
 fi
 
-if [ ! -f "$SSH_KEY" ]; then
-    echo "ERROR: SSH key file not found: $SSH_KEY"
-    exit 1
-fi
+for floating_ip in "${OWNED_FLOATING_IPS[@]}"; do
+    log "Deleting floating IP $floating_ip."
+    openstack floating ip delete "$floating_ip" >/dev/null 2>&1 || true
+done
 
-source "$OPENRC_FILE"
+log "Deleting security group."
+openstack security group delete "${TAG}_security_group" >/dev/null 2>&1 || true
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') OpenStack credentials loaded."
-echo "$(date '+%Y-%m-%d %H:%M:%S') Cleanup script skeleton is working."
+log "Deleting router."
+openstack router remove subnet "${TAG}_router" "${TAG}_subnet" >/dev/null 2>&1 || true
+openstack router unset --external-gateway "${TAG}_router" >/dev/null 2>&1 || true
+openstack router delete "${TAG}_router" >/dev/null 2>&1 || true
+
+log "Deleting subnet."
+openstack subnet delete "${TAG}_subnet" >/dev/null 2>&1 || true
+
+log "Deleting network."
+openstack network delete "${TAG}_network" >/dev/null 2>&1 || true
+
+log "Deleting keypair."
+openstack keypair delete "${TAG}_key" >/dev/null 2>&1 || true
+
+log "Checking remaining resources."
+
+openstack server list --tags "$TAG"
+openstack network show "${TAG}_network" >/dev/null 2>&1 && log "Network still exists." || true
+openstack subnet show "${TAG}_subnet" >/dev/null 2>&1 && log "Subnet still exists." || true
+openstack router show "${TAG}_router" >/dev/null 2>&1 && log "Router still exists." || true
+openstack security group show "${TAG}_security_group" >/dev/null 2>&1 && log "Security group still exists." || true
+openstack keypair show "${TAG}_key" >/dev/null 2>&1 && log "Keypair still exists." || true
+
+log "Cleanup completed."
