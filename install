@@ -20,8 +20,39 @@ check_openstack_cli
 load_openrc "$OPENRC_FILE"
 check_openstack_connection
 
-create_keypair_if_missing "$TAG" "$SSH_KEY"
-create_network_if_missing "$TAG"
-create_security_group_if_missing "$TAG"
+create_keypair "$TAG" "$SSH_KEY"
+create_network "$TAG"
+create_security_group "$TAG"
 
-log "Install basic OpenStack validation completed."
+IMAGE_NAME=$(get_image)
+FLAVOR_NAME=$(get_flavor)
+
+launch_server "${TAG}_bastion" "$TAG" "$IMAGE_NAME" "$FLAVOR_NAME"
+launch_server "${TAG}_proxy" "$TAG" "$IMAGE_NAME" "$FLAVOR_NAME"
+
+NODE_COUNT=$(cat servers.conf | tr -d '[:space:]')
+
+if ! [[ "$NODE_COUNT" =~ ^[0-9]+$ ]]; then
+    fail "servers.conf must contain a number."
+fi
+
+log "Will need $NODE_COUNT service nodes."
+
+NODE_NAMES=()
+for i in $(seq 1 "$NODE_COUNT"); do
+    NODE_NAME="${TAG}_node${i}"
+    launch_server "$NODE_NAME" "$TAG" "$IMAGE_NAME" "$FLAVOR_NAME"
+    NODE_NAMES+=("$NODE_NAME")
+done
+
+wait_for_servers "${TAG}_bastion" "${TAG}_proxy" "${NODE_NAMES[@]}"
+
+BASTION_IP=$(get_free_floating_ip)
+assign_floating_ip "${TAG}_bastion" "$BASTION_IP"
+
+PROXY_IP=$(get_free_floating_ip)
+assign_floating_ip "${TAG}_proxy" "$PROXY_IP"
+
+log "Cloud resources are ready."
+log "Bastion floating IP: $(get_floating_ip "${TAG}_bastion")"
+log "Proxy floating IP: $(get_floating_ip "${TAG}_proxy")"
