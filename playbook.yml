@@ -1,0 +1,158 @@
+---
+- name: Configure service nodes
+  hosts: nodes
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install service dependencies
+      apt:
+        name:
+          - python3
+          - python3-pip
+          - python3-flask
+          - snmpd
+        state: present
+
+    - name: Copy service.py
+      copy:
+        src: service.py
+        dest: /home/ubuntu/service.py
+        owner: ubuntu
+        group: ubuntu
+        mode: "0755"
+
+    - name: Create systemd service for service.py
+      copy:
+        dest: /etc/systemd/system/service-py.service
+        content: |
+          [Unit]
+          Description=Flask service
+          After=network.target
+
+          [Service]
+          User=ubuntu
+          WorkingDirectory=/home/ubuntu
+          Environment=FLASK_APP=service.py
+          ExecStart=/usr/bin/python3 -m flask run --host=0.0.0.0 --port=5000
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Start service.py
+      systemd:
+        name: service-py
+        enabled: yes
+        state: restarted
+        daemon_reload: yes
+
+    - name: Configure snmpd listen address
+      lineinfile:
+        path: /etc/snmp/snmpd.conf
+        regexp: '^agentAddress'
+        line: 'agentAddress udp:161,udp6:[::1]:161'
+
+    - name: Start snmpd
+      systemd:
+        name: snmpd
+        enabled: yes
+        state: restarted
+
+
+- name: Configure bastion
+  hosts: bastion
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install bastion dependencies
+      apt:
+        name:
+          - python3
+          - python3-pip
+          - python3-flask
+          - iputils-ping
+        state: present
+
+    - name: Install ping3
+      pip:
+        name: ping3
+
+    - name: Copy alive.py
+      copy:
+        src: alive.py
+        dest: /home/ubuntu/alive.py
+        owner: ubuntu
+        group: ubuntu
+        mode: "0755"
+
+    - name: Create systemd service for alive.py
+      copy:
+        dest: /etc/systemd/system/alive.service
+        content: |
+          [Unit]
+          Description=Node availability checker
+          After=network.target
+
+          [Service]
+          User=ubuntu
+          WorkingDirectory=/home/ubuntu
+          Environment=FLASK_APP=alive.py
+          ExecStart=/usr/bin/python3 -m flask run --host=0.0.0.0 --port=5001
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Start alive.py
+      systemd:
+        name: alive
+        enabled: yes
+        state: restarted
+        daemon_reload: yes
+
+
+- name: Configure proxy
+  hosts: proxy
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install proxy services
+      apt:
+        name:
+          - haproxy
+          - nginx
+        state: present
+
+    - name: Write HAProxy config
+      template:
+        src: haproxy.cfg.j2
+        dest: /etc/haproxy/haproxy.cfg
+
+    - name: Restart HAProxy
+      systemd:
+        name: haproxy
+        enabled: yes
+        state: restarted
+
+    - name: Write Nginx UDP stream config
+      template:
+        src: nginx_snmp.conf.j2
+        dest: /etc/nginx/conf.d/snmp-stream.conf
+
+    - name: Restart Nginx
+      systemd:
+        name: nginx
+        enabled: yes
+        state: restarted
