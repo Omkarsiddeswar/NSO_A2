@@ -238,7 +238,7 @@ import sys, json
 data = json.load(sys.stdin)
 for addrs in data['addresses'].values():
     for addr in addrs:
-        if addr.get('OS-EXT-IPS:type') == 'floating':
+        if isinstance(addr, dict) and addr.get('OS-EXT-IPS:type') == 'floating':
             print(addr['addr'])
             sys.exit()
 "
