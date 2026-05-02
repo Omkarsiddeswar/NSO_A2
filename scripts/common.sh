@@ -91,9 +91,31 @@ create_network_if_missing() {
         log "Added $router_name."
     fi
 
-    if ! openstack router show "$router_name" -f value -c interfaces_info | grep -q "$subnet_name"; then
+    if openstack port list --router "$router_name" -f value -c "Fixed IP Addresses" | grep -q "192.168.100.1"; then
+        log "Router interface already exists."
+    else
         log "Adding subnet to router."
-        openstack router add subnet "$router_name" "$subnet_name" || true
+        openstack router add subnet "$router_name" "$subnet_name"
         log "Router interface added."
     fi
+}
+create_security_group_if_missing() {
+    local tag="$1"
+    local sg_name="${tag}_security_group"
+
+    if openstack security group show "$sg_name" >/dev/null 2>&1; then
+        log "Detected $sg_name."
+    else
+        log "Adding security group $sg_name."
+        openstack security group create "$sg_name"
+    fi
+
+    log "Adding security group rules if missing."
+
+    openstack security group rule create --proto icmp "$sg_name" >/dev/null 2>&1 || true
+    openstack security group rule create --proto tcp --dst-port 22 "$sg_name" >/dev/null 2>&1 || true
+    openstack security group rule create --proto tcp --dst-port 5000 "$sg_name" >/dev/null 2>&1 || true
+    openstack security group rule create --proto udp --dst-port 6000 "$sg_name" >/dev/null 2>&1 || true
+
+    log "Security group rules ready."
 }

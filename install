@@ -22,5 +22,6 @@ check_openstack_connection
 
 create_keypair_if_missing "$TAG" "$SSH_KEY"
 create_network_if_missing "$TAG"
+create_security_group_if_missing "$TAG"
 
 log "Install basic OpenStack validation completed."
