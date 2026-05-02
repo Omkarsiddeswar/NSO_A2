@@ -11,19 +11,100 @@ OPENRC_FILE="$1"
 TAG="$2"
 SSH_KEY="$3"
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') Starting operation mode for $TAG."
+source scripts/common.sh
 
-if [ ! -f "$OPENRC_FILE" ]; then
-    echo "ERROR: OpenRC file not found: $OPENRC_FILE"
-    exit 1
+check_file_exists "$SSH_KEY" "SSH key file"
+check_openstack_cli
+load_openrc "$OPENRC_FILE"
+check_openstack_connection
+
+log "Starting operation mode for $TAG."
+
+BASTION_IP=$(get_floating_ip "${TAG}_bastion")
+PROXY_IP=$(get_floating_ip "${TAG}_proxy")
+IMAGE_NAME=$(get_image)
+FLAVOR_NAME=$(get_flavor)
+
+if [ -z "$BASTION_IP" ]; then
+    fail "No floating IP found for ${TAG}_bastion."
 fi
 
-if [ ! -f "$SSH_KEY" ]; then
-    echo "ERROR: SSH key file not found: $SSH_KEY"
-    exit 1
+if [ -z "$PROXY_IP" ]; then
+    fail "No floating IP found for ${TAG}_proxy."
 fi
 
-source "$OPENRC_FILE"
+while true; do
+    DESIRED_COUNT=$(cat servers.conf | tr -d '[:space:]')
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') OpenStack credentials loaded."
-echo "$(date '+%Y-%m-%d %H:%M:%S') Operate script skeleton is working."
+    if ! [[ "$DESIRED_COUNT" =~ ^[0-9]+$ ]]; then
+        fail "servers.conf must contain a number."
+    fi
+
+    log "Reading servers.conf, we need $DESIRED_COUNT nodes."
+
+    CURRENT_COUNT=$(count_live_nodes "$TAG" "$BASTION_IP" "$SSH_KEY")
+    log "Checking solution, we have $CURRENT_COUNT live nodes."
+
+    if [ "$CURRENT_COUNT" -eq "$DESIRED_COUNT" ]; then
+        log "Node count is correct. Sleeping."
+        sleep 30
+        continue
+    fi
+
+    if [ "$CURRENT_COUNT" -lt "$DESIRED_COUNT" ]; then
+        MISSING_COUNT=$((DESIRED_COUNT - CURRENT_COUNT))
+        log "Need to add $MISSING_COUNT node(s)."
+
+        NEW_NODES=()
+        CREATED=0
+        INDEX=1
+
+        while [ "$CREATED" -lt "$MISSING_COUNT" ]; do
+            NODE_NAME="${TAG}_node${INDEX}"
+
+            if ! openstack server show "$NODE_NAME" >/dev/null 2>&1; then
+                launch_server "$NODE_NAME" "$TAG" "$IMAGE_NAME" "$FLAVOR_NAME"
+                NEW_NODES+=("$NODE_NAME")
+                CREATED=$((CREATED + 1))
+            fi
+
+            INDEX=$((INDEX + 1))
+        done
+
+        wait_for_servers "${NEW_NODES[@]}"
+    else
+        EXTRA_COUNT=$((CURRENT_COUNT - DESIRED_COUNT))
+        log "Need to remove $EXTRA_COUNT extra node(s)."
+
+        REMOVED=0
+        INDEX=$(openstack server list --name "${TAG}_node" -f value -c Name | wc -l)
+
+        while [ "$REMOVED" -lt "$EXTRA_COUNT" ] && [ "$INDEX" -ge 1 ]; do
+            NODE_NAME="${TAG}_node${INDEX}"
+
+            if openstack server show "$NODE_NAME" >/dev/null 2>&1; then
+                log "Removing $NODE_NAME."
+                openstack server delete "$NODE_NAME" >/dev/null 2>&1 || true
+                REMOVED=$((REMOVED + 1))
+            fi
+
+            INDEX=$((INDEX - 1))
+        done
+
+        sleep 10
+    fi
+
+    build_ssh_config "$TAG" "$SSH_KEY" "$BASTION_IP"
+    build_inventory "$TAG"
+    update_node_list "$TAG" "$BASTION_IP" "$SSH_KEY"
+
+    log "Running Ansible playbook."
+    ansible-playbook -i hosts playbook.yml \
+        --ssh-extra-args="-F ${TAG}_SSHconfig -o StrictHostKeyChecking=no" \
+        -e "tag=$TAG proxy_ip=$PROXY_IP node_count=$DESIRED_COUNT"
+
+    validate_deployment "$PROXY_IP"
+
+    log "Sleeping."
+    sleep 30
+done

@@ -386,3 +386,36 @@ validate_deployment() {
 
     log "Validation completed."
 }
+count_live_nodes() {
+    local tag="$1"
+    local bastion_ip="$2"
+    local key_file="$3"
+    local node_count
+
+    node_count=$(cat servers.conf | tr -d '[:space:]')
+
+    local live_count=0
+
+    for i in $(seq 1 "$node_count"); do
+        local node_ip
+        node_ip=$(get_server_ip "${tag}_node${i}" 2>/dev/null || true)
+
+        if [ -z "$node_ip" ]; then
+            continue
+        fi
+
+        local result
+        result=$(ssh -i "$key_file" \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -o ConnectTimeout=5 \
+            "ubuntu@$bastion_ip" \
+            "ping -c1 -W2 $node_ip >/dev/null 2>&1 && echo ok" 2>/dev/null || true)
+
+        if [ "$result" = "ok" ]; then
+            live_count=$((live_count + 1))
+        fi
+    done
+
+    echo "$live_count"
+}
