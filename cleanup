@@ -1,4 +1,4 @@
-kk#!/usr/bin/env bash
+#!/usr/bin/env bash
 
 set -e
 
@@ -16,6 +16,7 @@ source scripts/common.sh
 check_file_exists "$SSH_KEY" "SSH key file"
 check_openstack_cli
 load_openrc "$OPENRC_FILE"
+export OS_COMPUTE_API_VERSION=2.52
 check_openstack_connection
 
 log "Cleaning up resources for $TAG."

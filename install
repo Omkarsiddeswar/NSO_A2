@@ -18,6 +18,7 @@ log "Starting deployment of $TAG using $OPENRC_FILE for credentials."
 check_file_exists "$SSH_KEY" "SSH key file"
 check_openstack_cli
 load_openrc "$OPENRC_FILE"
+export OS_COMPUTE_API_VERSION=2.52
 check_openstack_connection
 
 create_keypair "$TAG" "$SSH_KEY"
