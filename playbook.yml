@@ -3,6 +3,11 @@
   hosts: nodes
   become: yes
   tasks:
+
+    - name: wait for cloud-init
+      command: cloud-init status --wait
+      changed_when: false
+
     - name: Update apt cache
       apt:
         update_cache: yes
@@ -67,6 +72,11 @@
   hosts: bastion
   become: yes
   tasks:
+
+    - name: wait for cloud-init
+      command: cloud-init status --wait
+      changed_when: false
+
     - name: Update apt cache
       apt:
         update_cache: yes
@@ -124,6 +134,11 @@
   hosts: proxy
   become: yes
   tasks:
+
+    - name: wait for cloud-init
+      command: cloud-init status --wait
+      changed_when: false
+
     - name: Update apt cache
       apt:
         update_cache: yes

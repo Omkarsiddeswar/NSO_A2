@@ -283,7 +283,7 @@ wait_for_ssh() {
 
         tries=$((tries + 1))
 
-        if [ "$tries" -ge 24 ]; then
+        if [ "$tries" -ge 48 ]; then
             fail "SSH on $ip_address did not become ready."
         fi
 
