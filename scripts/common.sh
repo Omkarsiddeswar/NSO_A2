@@ -206,3 +206,55 @@ get_server_ip() {
     openstack server show "$server_name" -f json | \
         python3 -c "import sys,json; d=json.load(sys.stdin); print(list(d['addresses'].values())[0][0]['addr'])"
 }
+
+get_free_floating_ip() {
+    local free_ip
+
+    free_ip=$(openstack floating ip list --status DOWN -f value -c "Floating IP Address" 2>/dev/null | head -1)
+
+    if [ -n "$free_ip" ]; then
+        log "Reusing floating IP $free_ip." >&2
+        echo "$free_ip"
+        return
+    fi
+
+    local external_network
+    external_network=$(openstack network list --external -f value -c Name | head -1)
+
+    if [ -z "$external_network" ]; then
+        fail "No external network found for floating IP allocation."
+    fi
+
+    log "Allocating new floating IP from $external_network." >&2
+    openstack floating ip create "$external_network" -f value -c floating_ip_address
+}
+
+get_floating_ip() {
+    local server_name="$1"
+
+    openstack server show "$server_name" -f json | \
+        python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for addrs in data['addresses'].values():
+    for addr in addrs:
+        if addr.get('OS-EXT-IPS:type') == 'floating':
+            print(addr['addr'])
+            sys.exit()
+"
+}
+
+assign_floating_ip() {
+    local server_name="$1"
+    local floating_ip="$2"
+
+    local existing_ip
+    existing_ip=$(get_floating_ip "$server_name" 2>/dev/null || true)
+
+    if [ -n "$existing_ip" ]; then
+        log "$server_name already has floating IP $existing_ip."
+    else
+        log "Assigning floating IP $floating_ip to $server_name."
+        openstack server add floating ip "$server_name" "$floating_ip"
+    fi
+}
