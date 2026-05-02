@@ -5,7 +5,7 @@ log() {
 }
 
 fail() {
-    echo "ERROR: $1"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') ERROR: $1"
     exit 1
 }
 
@@ -29,7 +29,7 @@ load_openrc() {
 
 check_openstack_cli() {
     if ! command -v openstack >/dev/null 2>&1; then
-        fail "OpenStack CLI is not installed. Install it first using: sudo apt install python3-openstackclient"
+        fail "OpenStack CLI not found. Install python3-openstackclient first."
     fi
 
     log "OpenStack CLI found."
@@ -39,83 +39,8 @@ check_openstack_connection() {
     log "Checking OpenStack connection."
 
     if ! openstack server list >/dev/null 2>&1; then
-        fail "Could not connect to OpenStack. Check your OpenRC file and credentials."
+        fail "Could not connect to OpenStack. Check the OpenRC file and credentials."
     fi
 
     log "OpenStack connection OK."
-}
-create_keypair_if_missing() {
-    local tag="$1"
-    local ssh_key="$2"
-    local key_name="${tag}_key"
-
-    if openstack keypair show "$key_name" >/dev/null 2>&1; then
-        log "Detected $key_name keypair."
-    else
-        log "Adding $key_name associated with $ssh_key."
-        openstack keypair create --public-key "${ssh_key}.pub" "$key_name"
-    fi
-}
-
-create_network_if_missing() {
-    local tag="$1"
-    local network_name="${tag}_network"
-    local subnet_name="${tag}_subnet"
-    local router_name="${tag}_router"
-
-    if openstack network show "$network_name" >/dev/null 2>&1; then
-        log "Detected $network_name."
-    else
-        log "Did not detect $network_name, adding it."
-        openstack network create "$network_name"
-        log "Added $network_name."
-    fi
-
-    if openstack subnet show "$subnet_name" >/dev/null 2>&1; then
-        log "Detected $subnet_name."
-    else
-        log "Did not detect $subnet_name, adding it."
-        openstack subnet create \
-            --network "$network_name" \
-            --subnet-range 192.168.100.0/24 \
-            --dns-nameserver 8.8.8.8 \
-            "$subnet_name"
-        log "Added $subnet_name."
-    fi
-
-    if openstack router show "$router_name" >/dev/null 2>&1; then
-        log "Detected $router_name."
-    else
-        log "Did not detect $router_name, adding it."
-        openstack router create "$router_name"
-        log "Added $router_name."
-    fi
-
-    if openstack port list --router "$router_name" -f value -c "Fixed IP Addresses" | grep -q "192.168.100.1"; then
-        log "Router interface already exists."
-    else
-        log "Adding subnet to router."
-        openstack router add subnet "$router_name" "$subnet_name"
-        log "Router interface added."
-    fi
-}
-create_security_group_if_missing() {
-    local tag="$1"
-    local sg_name="${tag}_security_group"
-
-    if openstack security group show "$sg_name" >/dev/null 2>&1; then
-        log "Detected $sg_name."
-    else
-        log "Adding security group $sg_name."
-        openstack security group create "$sg_name"
-    fi
-
-    log "Adding security group rules if missing."
-
-    openstack security group rule create --proto icmp "$sg_name" >/dev/null 2>&1 || true
-    openstack security group rule create --proto tcp --dst-port 22 "$sg_name" >/dev/null 2>&1 || true
-    openstack security group rule create --proto tcp --dst-port 5000 "$sg_name" >/dev/null 2>&1 || true
-    openstack security group rule create --proto udp --dst-port 6000 "$sg_name" >/dev/null 2>&1 || true
-
-    log "Security group rules ready."
 }
