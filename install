@@ -48,13 +48,19 @@ done
 
 wait_for_servers "${TAG}_bastion" "${TAG}_proxy" "${NODE_NAMES[@]}"
 
-BASTION_IP=$(get_free_floating_ip)
-assign_floating_ip "${TAG}_bastion" "$BASTION_IP"
+BASTION_IP=$(get_floating_ip "${TAG}_bastion" 2>/dev/null || true)
+if [ -z "$BASTION_IP" ]; then
+    BASTION_IP=$(get_free_floating_ip)
+    assign_floating_ip "${TAG}_bastion" "$BASTION_IP"
+fi
 
 sleep 5
 
-PROXY_IP=$(get_free_floating_ip)
-assign_floating_ip "${TAG}_proxy" "$PROXY_IP"
+PROXY_IP=$(get_floating_ip "${TAG}_proxy" 2>/dev/null || true)
+if [ -z "$PROXY_IP" ]; then
+    PROXY_IP=$(get_free_floating_ip)
+    assign_floating_ip "${TAG}_proxy" "$PROXY_IP"
+fi
 
 BASTION_IP=$(get_floating_ip "${TAG}_bastion")
 PROXY_IP=$(get_floating_ip "${TAG}_proxy")
