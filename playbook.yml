@@ -1,6 +1,4 @@
 ---
-# Run common setup on all hosts first so the per-role plays
-# don't waste time repeating apt update and base installs.
 - name: Common setup on all hosts
   hosts: all
   become: yes
@@ -117,7 +115,6 @@
     - name: Install ping3
       pip:
         name: ping3
-        extra_args: "--break-system-packages"
 
     - name: Copy alive.py
       copy:

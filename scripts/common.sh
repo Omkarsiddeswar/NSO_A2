@@ -205,7 +205,7 @@ get_server_ip() {
 
     while [ "$tries" -lt 12 ]; do
         local result
-        result=$(openstack server show "$server_name" -f json | \
+        result=$(openstack server show "$server_name" -f json </dev/null | \
             python3 -c "
 import sys, json
 d = json.load(sys.stdin)
@@ -393,19 +393,11 @@ update_node_list() {
     local node_count
     node_count=$(cat servers.conf | tr -d '[:space:]')
 
-    # One API call for all node IPs
-    local node_ips
-    node_ips=$(openstack server list --name "${tag}_node" -f json | python3 -c "
-import sys, json
-servers = {s['Name']: s for s in json.load(sys.stdin)}
-for i in range(1, int('$node_count') + 1):
-    name = '${tag}_node' + str(i)
-    for addrs in servers[name]['addresses'].values():
-        if addrs:
-            a = addrs[0]
-            print(a if isinstance(a, str) else a['addr'])
-            break
-")
+    # fetch each node IP using get_server_ip so the retry logic applies
+    local node_ips=""
+    for i in $(seq 1 "$node_count"); do
+        node_ips+="$(get_server_ip "${tag}_node${i}")"$'\n'
+    done
 
     echo "$node_ips" | ssh -i "$key_file" \
         -o StrictHostKeyChecking=no \
