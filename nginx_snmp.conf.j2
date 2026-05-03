@@ -1,7 +1,7 @@
 stream {
     upstream snmp_nodes {
 {% for host in groups['nodes'] %}
-        server {{ hostvars[host]['ansible_host'] }}:161;
+        server {{ hostvars[host]['ansible_default_ipv4']['address'] }}:161;
 {% endfor %}
     }
 

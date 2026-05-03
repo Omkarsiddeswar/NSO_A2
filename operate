@@ -96,7 +96,7 @@ while true; do
     fi
 
     build_ssh_config "$TAG" "$SSH_KEY" "$BASTION_IP"
-    build_inventory "$TAG"
+    build_inventory "$TAG" "$BASTION_IP"
     update_node_list "$TAG" "$BASTION_IP" "$SSH_KEY"
 
     log "Running Ansible playbook."
