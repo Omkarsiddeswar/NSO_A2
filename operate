@@ -80,6 +80,7 @@ while true; do
         EXTRA_COUNT=$((CURRENT_COUNT - DESIRED_COUNT))
         log "Need to remove $EXTRA_COUNT extra node(s)."
 
+        DELETED_NODES=()
         REMOVED=0
         INDEX=$(openstack server list --name "${TAG}_node" -f value -c Name | wc -l)
 
@@ -90,12 +91,19 @@ while true; do
                 log "Removing $NODE_NAME."
                 openstack server delete "$NODE_NAME" >/dev/null 2>&1 || true
                 REMOVED=$((REMOVED + 1))
+                DELETED_NODES+=("$NODE_NAME")
             fi
 
             INDEX=$((INDEX - 1))
         done
 
         sleep 20
+        for node_name in "${DELETED_NODES[@]}"; do
+            while openstack server show "$node_name" >/dev/null 2>&1; do
+                log "Waiting for $node_name to be deleted..."
+                sleep 5
+            done
+        done
     fi
 
     build_ssh_config "$TAG" "$SSH_KEY" "$BASTION_IP"
@@ -107,7 +115,7 @@ while true; do
         --ssh-extra-args="-F ${TAG}_SSHconfig -o StrictHostKeyChecking=no" \
         -e "tag=$TAG proxy_ip=$PROXY_IP node_count=$DESIRED_COUNT"
 
-    validate_deployment "$PROXY_IP"
+    validate_deployment "$PROXY_IP" "$((DESIRED_COUNT + 2))"
 
     log "Sleeping."
     sleep 30

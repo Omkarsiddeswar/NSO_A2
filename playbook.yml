@@ -1,10 +1,13 @@
 ---
-- name: Configure service nodes
-  hosts: nodes
+# Run common setup on all hosts first so the per-role plays
+# don't waste time repeating apt update and base installs.
+- name: Common setup on all hosts
+  hosts: all
   become: yes
+  strategy: free
   tasks:
 
-    - name: wait for cloud-init
+    - name: Wait for cloud-init
       command: cloud-init status --wait
       changed_when: false
 
@@ -12,15 +15,29 @@
       apt:
         update_cache: yes
         cache_valid_time: 3600
+        lock_timeout: 300
 
-    - name: Install service dependencies
+    - name: Install common packages
       apt:
         name:
           - python3
           - python3-pip
           - python3-flask
-          - snmpd
         state: present
+        lock_timeout: 300
+
+
+- name: Configure service nodes
+  hosts: nodes
+  become: yes
+  strategy: free
+  tasks:
+
+    - name: Install snmpd
+      apt:
+        name: snmpd
+        state: present
+        lock_timeout: 300
 
     - name: Copy service.py
       copy:
@@ -29,6 +46,7 @@
         owner: ubuntu
         group: ubuntu
         mode: "0755"
+      notify: restart service-py
 
     - name: Create systemd service for service.py
       copy:
@@ -47,12 +65,13 @@
 
           [Install]
           WantedBy=multi-user.target
+      notify: restart service-py
 
-    - name: Start service.py
+    - name: Enable service-py
       systemd:
         name: service-py
         enabled: yes
-        state: restarted
+        state: started
         daemon_reload: yes
 
     - name: Configure snmpd listen address
@@ -60,40 +79,45 @@
         path: /etc/snmp/snmpd.conf
         regexp: '^agentAddress'
         line: 'agentAddress udp:161,udp6:[::1]:161'
+      notify: restart snmpd
 
-    - name: Start snmpd
+    - name: Enable snmpd
       systemd:
         name: snmpd
         enabled: yes
+        state: started
+
+  handlers:
+    - name: restart service-py
+      systemd:
+        name: service-py
+        state: restarted
+        daemon_reload: yes
+
+    - name: restart snmpd
+      systemd:
+        name: snmpd
         state: restarted
 
 
 - name: Configure bastion
   hosts: bastion
   become: yes
+  strategy: free
   tasks:
 
-    - name: wait for cloud-init
-      command: cloud-init status --wait
-      changed_when: false
-
-    - name: Update apt cache
+    - name: Install iputils-ping
       apt:
-        update_cache: yes
-        cache_valid_time: 3600
-
-    - name: Install bastion dependencies
-      apt:
-        name:
-          - python3
-          - python3-pip
-          - python3-flask
-          - iputils-ping
+        name: iputils-ping
         state: present
+        lock_timeout: 300
 
+    # pip3 on Ubuntu 22.04+ refuses to install into the system python
+    # without this flag
     - name: Install ping3
       pip:
         name: ping3
+        extra_args: "--break-system-packages"
 
     - name: Copy alive.py
       copy:
@@ -102,6 +126,7 @@
         owner: ubuntu
         group: ubuntu
         mode: "0755"
+      notify: restart alive
 
     - name: Create systemd service for alive.py
       copy:
@@ -121,11 +146,19 @@
 
           [Install]
           WantedBy=multi-user.target
+      notify: restart alive
 
-    - name: Start alive.py
+    - name: Enable alive
       systemd:
         name: alive
         enabled: yes
+        state: started
+        daemon_reload: yes
+
+  handlers:
+    - name: restart alive
+      systemd:
+        name: alive
         state: restarted
         daemon_reload: yes
 
@@ -133,16 +166,8 @@
 - name: Configure proxy
   hosts: proxy
   become: yes
+  strategy: free
   tasks:
-
-    - name: wait for cloud-init
-      command: cloud-init status --wait
-      changed_when: false
-
-    - name: Update apt cache
-      apt:
-        update_cache: yes
-        cache_valid_time: 3600
 
     - name: Install proxy services
       apt:
@@ -150,31 +175,47 @@
           - haproxy
           - nginx-full
         state: present
+        lock_timeout: 300
 
     - name: Write HAProxy config
       template:
         src: haproxy.cfg.j2
         dest: /etc/haproxy/haproxy.cfg
+      notify: restart haproxy
 
-    - name: Restart HAProxy
+    - name: Enable HAProxy
       systemd:
         name: haproxy
         enabled: yes
-        state: restarted
+        state: started
 
     - name: Write Nginx UDP stream config
       template:
         src: nginx_snmp.conf.j2
         dest: /etc/nginx/stream.conf
+      notify: restart nginx
 
+    # stream {} block must come before the http {} block in nginx.conf
     - name: Make sure nginx.conf includes the stream config
       lineinfile:
         path: /etc/nginx/nginx.conf
         line: 'include /etc/nginx/stream.conf;'
         insertbefore: '^http'
+      notify: restart nginx
 
-    - name: Restart Nginx
+    - name: Enable Nginx
       systemd:
         name: nginx
         enabled: yes
+        state: started
+
+  handlers:
+    - name: restart haproxy
+      systemd:
+        name: haproxy
+        state: restarted
+
+    - name: restart nginx
+      systemd:
+        name: nginx
         state: restarted

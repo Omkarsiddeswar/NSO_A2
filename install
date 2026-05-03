@@ -81,4 +81,4 @@ log "Cloud resources are ready."
 log "Bastion floating IP: $BASTION_IP"
 log "Proxy floating IP: $PROXY_IP"
 
-validate_deployment "$PROXY_IP"
+validate_deployment "$PROXY_IP" "$((NODE_COUNT + 2))"

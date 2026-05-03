@@ -179,38 +179,54 @@ launch_server() {
 
 wait_for_servers() {
     local servers=("$@")
-
     log "Waiting for servers to become ACTIVE."
 
     for server_name in "${servers[@]}"; do
-        local status=""
-        local tries=0
-
-        while [ "$status" != "ACTIVE" ] && [ "$tries" -lt 60 ]; do
-            sleep 5
-            status=$(openstack server show "$server_name" -f value -c status 2>/dev/null || echo "")
-            tries=$((tries + 1))
-        done
-
-        if [ "$status" != "ACTIVE" ]; then
-            fail "$server_name did not become ACTIVE. Current status: $status"
-        fi
-
-        log "$server_name is ACTIVE."
+        (
+            local status="" tries=0
+            while [ "$status" != "ACTIVE" ] && [ "$tries" -lt 60 ]; do
+                sleep 5
+                status=$(openstack server show "$server_name" -f value -c status 2>/dev/null || echo "")
+                tries=$((tries + 1))
+            done
+            if [ "$status" != "ACTIVE" ]; then
+                echo "ERROR: $server_name did not become ACTIVE" >&2
+                exit 1
+            fi
+            log "$server_name is ACTIVE."
+        ) &
     done
+    wait
 }
 
 get_server_ip() {
     local server_name="$1"
+    local tries=0
 
-    openstack server show "$server_name" -f json | \
-        python3 -c "
+    while [ "$tries" -lt 12 ]; do
+        local result
+        result=$(openstack server show "$server_name" -f json | \
+            python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-addrs = list(d['addresses'].values())[0]
-a = addrs[0]
+addrs = d.get('addresses', {})
+if not addrs:
+    sys.exit(1)
+a = list(addrs.values())[0][0]
 print(a if isinstance(a, str) else a['addr'])
-"
+" 2>/dev/null)
+
+        if [ -n "$result" ]; then
+            echo "$result"
+            return
+        fi
+
+        tries=$((tries + 1))
+        sleep 5
+    done
+
+    echo "ERROR: could not get IP for $server_name" >&2
+    exit 1
 }
 
 get_free_floating_ip() {
@@ -298,8 +314,19 @@ build_ssh_config() {
     local key_file="$2"
     local bastion_ip="$3"
     local output_file="${tag}_SSHconfig"
+    local node_count
+    node_count=$(cat servers.conf | tr -d '[:space:]')
 
     log "Writing SSH config to $output_file."
+
+    # fetch all IPs up front before touching the heredoc
+    local proxy_ip
+    proxy_ip=$(get_server_ip "${tag}_proxy")
+
+    local node_ips=()
+    for i in $(seq 1 "$node_count"); do
+        node_ips+=("$(get_server_ip "${tag}_node${i}")")
+    done
 
     cat > "$output_file" <<EOF
 Host bastion ${tag}_bastion
@@ -310,7 +337,7 @@ Host bastion ${tag}_bastion
     UserKnownHostsFile /dev/null
 
 Host ${tag}_proxy
-    HostName $(get_server_ip "${tag}_proxy")
+    HostName ${proxy_ip}
     User ubuntu
     IdentityFile $key_file
     ProxyJump bastion
@@ -318,14 +345,11 @@ Host ${tag}_proxy
     UserKnownHostsFile /dev/null
 EOF
 
-    local node_count
-    node_count=$(cat servers.conf | tr -d '[:space:]')
-
     for i in $(seq 1 "$node_count"); do
         cat >> "$output_file" <<EOF
 
 Host ${tag}_node${i}
-    HostName $(get_server_ip "${tag}_node${i}")
+    HostName ${node_ips[$((i-1))]}
     User ubuntu
     IdentityFile $key_file
     ProxyJump bastion
@@ -367,13 +391,21 @@ update_node_list() {
     local bastion_ip="$2"
     local key_file="$3"
     local node_count
-
     node_count=$(cat servers.conf | tr -d '[:space:]')
 
-    local node_ips=""
-    for i in $(seq 1 "$node_count"); do
-        node_ips+="$(get_server_ip "${tag}_node${i}")"$'\n'
-    done
+    # One API call for all node IPs
+    local node_ips
+    node_ips=$(openstack server list --name "${tag}_node" -f json | python3 -c "
+import sys, json
+servers = {s['Name']: s for s in json.load(sys.stdin)}
+for i in range(1, int('$node_count') + 1):
+    name = '${tag}_node' + str(i)
+    for addrs in servers[name]['addresses'].values():
+        if addrs:
+            a = addrs[0]
+            print(a if isinstance(a, str) else a['addr'])
+            break
+")
 
     echo "$node_ips" | ssh -i "$key_file" \
         -o StrictHostKeyChecking=no \
@@ -382,12 +414,14 @@ update_node_list() {
 
     log "Updated node list on bastion."
 }
+
 validate_deployment() {
     local proxy_ip="$1"
+    local count="${2:-5}"
 
-    log "Validating service through proxy."
+    log "Validating service through proxy ($count requests)."
 
-    for i in 1 2 3; do
+    for i in $(seq 1 "$count"); do
         local response
         response=$(curl -s --max-time 5 "http://${proxy_ip}:5000/" 2>/dev/null || echo "no response")
         log "Request ${i}: $response"
@@ -395,6 +429,7 @@ validate_deployment() {
 
     log "Validation completed."
 }
+
 count_live_nodes() {
     local tag="$1"
     local bastion_ip="$2"
