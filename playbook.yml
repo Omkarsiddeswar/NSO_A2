@@ -165,12 +165,12 @@
     - name: Write Nginx UDP stream config
       template:
         src: nginx_snmp.conf.j2
-        dest: /etc/nginx/modules-enabled/snmp-stream.conf
+        dest: /etc/nginx/stream.conf
 
     - name: Make sure nginx.conf includes the stream config
       lineinfile:
         path: /etc/nginx/nginx.conf
-        line: 'include /etc/nginx/modules-enabled/snmp-stream.conf;'
+        line: 'include /etc/nginx/stream.conf;'
         insertbefore: '^http'
 
     - name: Restart Nginx
