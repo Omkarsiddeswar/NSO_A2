@@ -345,14 +345,14 @@ build_inventory() {
 
     {
         echo "[proxy]"
-        echo "${tag}_proxy"
+        echo "${tag}_proxy ansible_host=$(get_server_ip "${tag}_proxy")"
         echo ""
         echo "[bastion]"
         echo "${tag}_bastion ansible_host=${bastion_pub}"
         echo ""
         echo "[nodes]"
         for i in $(seq 1 "$node_count"); do
-            echo "${tag}_node${i}"
+            echo "${tag}_node${i} ansible_host=$(get_server_ip "${tag}_node${i}")"
         done
         echo ""
         echo "[all:vars]"
