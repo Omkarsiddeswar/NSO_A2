@@ -148,7 +148,7 @@
       apt:
         name:
           - haproxy
-          - nginx
+          - nginx-full
         state: present
 
     - name: Write HAProxy config
@@ -171,7 +171,7 @@
       lineinfile:
         path: /etc/nginx/nginx.conf
         line: 'include /etc/nginx/modules-enabled/snmp-stream.conf;'
-        insertafter: EOF
+        insertbefore: '^http'
 
     - name: Restart Nginx
       systemd:

@@ -34,6 +34,8 @@ if [ -z "$PROXY_IP" ]; then
     fail "No floating IP found for ${TAG}_proxy."
 fi
 
+set +e
+
 while true; do
     DESIRED_COUNT=$(cat servers.conf | tr -d '[:space:]')
 
