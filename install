@@ -59,10 +59,11 @@ assign_floating_ip "${TAG}_proxy" "$PROXY_IP"
 BASTION_IP=$(get_floating_ip "${TAG}_bastion")
 PROXY_IP=$(get_floating_ip "${TAG}_proxy")
 
+
 wait_for_ssh "$BASTION_IP" "$SSH_KEY"
 
 build_ssh_config "$TAG" "$SSH_KEY" "$BASTION_IP"
-build_inventory "$TAG"
+build_inventory "$TAG" "$BASTION_IP"
 update_node_list "$TAG" "$BASTION_IP" "$SSH_KEY"
 
 log "Running Ansible playbook."

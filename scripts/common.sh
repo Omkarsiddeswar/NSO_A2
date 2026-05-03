@@ -302,7 +302,7 @@ build_ssh_config() {
     log "Writing SSH config to $output_file."
 
     cat > "$output_file" <<EOF
-Host bastion
+Host bastion ${tag}_bastion
     HostName $bastion_ip
     User ubuntu
     IdentityFile $key_file
@@ -337,6 +337,7 @@ EOF
 
 build_inventory() {
     local tag="$1"
+    local bastion_pub="$2"
     local node_count
     node_count=$(cat servers.conf | tr -d '[:space:]')
 
@@ -347,7 +348,7 @@ build_inventory() {
         echo "${tag}_proxy"
         echo ""
         echo "[bastion]"
-        echo "${tag}_bastion"
+        echo "${tag}_bastion ansible_host=${bastion_pub}"
         echo ""
         echo "[nodes]"
         for i in $(seq 1 "$node_count"); do
