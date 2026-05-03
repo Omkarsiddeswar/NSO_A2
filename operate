@@ -75,6 +75,7 @@ while true; do
         done
 
         wait_for_servers "${NEW_NODES[@]}"
+        sleep 30
     else
         EXTRA_COUNT=$((CURRENT_COUNT - DESIRED_COUNT))
         log "Need to remove $EXTRA_COUNT extra node(s)."

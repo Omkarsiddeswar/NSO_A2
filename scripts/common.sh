@@ -401,25 +401,30 @@ count_live_nodes() {
     local key_file="$3"
     local live_count=0
 
+    local node_list
+    node_list=$(openstack server list --name "${tag}_node" -f value -c Name 2>/dev/null)
+
     while IFS= read -r node_name; do
         [ -z "$node_name" ] && continue
 
         local node_ip
-        node_ip=$(get_server_ip "$node_name" 2>/dev/null || true)
+        node_ip=$(get_server_ip "$node_name" </dev/null 2>/dev/null || true)
         [ -z "$node_ip" ] && continue
 
         local result
         result=$(ssh -i "$key_file" \
+            -n \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
             -o ConnectTimeout=5 \
+            -o BatchMode=yes \
             "ubuntu@$bastion_ip" \
             "ping -c1 -W2 $node_ip >/dev/null 2>&1 && echo ok" 2>/dev/null || true)
 
         if [ "$result" = "ok" ]; then
             live_count=$((live_count + 1))
         fi
-    done <<< "$(openstack server list --name "${tag}_node" -f value -c Name 2>/dev/null)"
+    done < <(echo "$node_list")
 
     echo "$live_count"
 }
