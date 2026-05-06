@@ -76,7 +76,7 @@
       lineinfile:
         path: /etc/snmp/snmpd.conf
         regexp: '^agentAddress'
-        line: 'agentAddress udp:161,udp6:[::1]:161'
+        line: 'agentAddress udp:0.0.0.0:161'
       notify: restart snmpd
 
     - name: Enable snmpd
