@@ -145,8 +145,12 @@ get_image() {
 }
 
 get_flavor() {
-    if openstack flavor show tiny >/dev/null 2>&1; then
+    if openstack flavor show "2C-2GB-20GB" >/dev/null 2>&1; then
+        echo "2C-2GB-20GB"
+    elif openstack flavor show tiny >/dev/null 2>&1; then
         echo "tiny"
+    elif openstack flavor show small >/dev/null 2>&1; then
+        echo "small"
     else
         openstack flavor list -f value -c Name | head -1
     fi
