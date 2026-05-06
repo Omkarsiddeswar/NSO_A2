@@ -76,7 +76,14 @@
       lineinfile:
         path: /etc/snmp/snmpd.conf
         regexp: '^agentAddress'
-        line: 'agentAddress udp:0.0.0.0:161'
+        line: 'agentAddress udp:{{ ansible_default_ipv4.address }}:161'
+      notify: restart snmpd
+
+    - name: Configure SNMP community
+      lineinfile:
+        path: /etc/snmp/snmpd.conf
+        regexp: '^rocommunity'
+        line: 'rocommunity public 192.168.100.0/24'
       notify: restart snmpd
 
     - name: Enable snmpd
